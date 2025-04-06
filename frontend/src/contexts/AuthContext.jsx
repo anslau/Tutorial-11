@@ -21,31 +21,31 @@ export const AuthProvider = ({ children }) => {
     useEffect(() => {
         const storedToken = localStorage.getItem('token');
         if (storedToken) {
-            getUser(storedToken);
-            setToken(storedToken);
+            fetch(`${BACKEND_URL}/user/me`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${storedToken}`
+                }
+            })
+                .then(response => {
+                    if (response.ok) {
+                        return response.json();
+                    } else {
+                        throw new Error('Failed to fetch user');
+                    }
+                })
+                .then(data => {
+                    setUser(data.user);
+                })
+                .catch(() => {
+                    setUser(null);
+                });
         }else{
-            setToken(null);
             setUser(null);
         }
         
     }, []);
-
-    const getUser = async (token) => {
-        const response = await fetch(`${BACKEND_URL}/user/me`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`
-            }
-        });
-
-        if (response.ok) {
-            const data = await response.json();
-            setUser(data.user);
-        } else {
-            setUser(null);
-        }
-    };
 
     /*
      * Logout the currently authenticated user.
@@ -69,24 +69,43 @@ export const AuthProvider = ({ children }) => {
      * @returns {string} - Upon failure, Returns an error message.
      */
     const login = async (username, password) => {
-        const response = await fetch(`${BACKEND_URL}/login`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ username, password })
-        });
+        try{
+            const response = await fetch(`${BACKEND_URL}/login`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ username, password })
+            });
+    
+            if (!response.ok) {
+                const errorData = await response.json();
+                return errorData.message;
+            }
 
-        if (!response.ok) {
-            const errorData = await response.json();
-            return errorData.message || "Login failed";
+            const data = await response.json();
+            localStorage.setItem('token', data.token);
+
+            const userResponse = await fetch(`${BACKEND_URL}/user/me`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${data.token}`
+                }
+            });
+
+            if (!userResponse.ok) {
+                const errorData = await userResponse.json();
+                return errorData.message;
+            }
+            const userData = await userResponse.json();
+    
+            setUser(userData.user);
+            setToken(data.token);
+            navigate("/profile");
+        }catch(e){
+            return e.message;
         }
-
-        const data = await response.json();
-        localStorage.setItem('token', data.token);
-        setToken(data.token);
-        getUser(data.token);
-        navigate("/profile");
     };
 
     /**
@@ -97,21 +116,26 @@ export const AuthProvider = ({ children }) => {
      * @returns {string} - Upon failure, returns an error message.
      */
     const register = async (userData) => {
-        const response = await fetch(`${BACKEND_URL}/register`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            credentials: 'include',
-            body: JSON.stringify(userData)
-        });
+        try{
+            const response = await fetch(`${BACKEND_URL}/register`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include',
+                body: JSON.stringify(userData)
+            });
 
-        if (!response.ok) {
-            const errorData = await response.json();
-            return errorData.message || "Could not register user";
+            if (!response.ok) {
+                const errorData = await response.json();
+                return errorData.message;
+            }
+
+            navigate("/success");
+
+        }catch(e){
+            return e.message;
         }
-
-        navigate("/success");
     };
 
     return (
